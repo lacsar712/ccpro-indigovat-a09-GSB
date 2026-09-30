@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}染种配方档{% endblock %}
+{% block content %}
+<div class="recipes-wrap">
+  {% if error %}
+  <div class="error-box">{{ error }}</div>
+  {% endif %}
+
+  <section class="recipe-current panel-lite">
+    <h2>现行配方档</h2>
+    <p class="hint">每染种至多一条现行；本列表与还原台缸位条缺档提示同源。</p>
+    <div class="current-strip">
+      {% for r in current_list %}
+      <div class="current-card">
+        <div class="dye">{{ r.dye_name }}</div>
+        <div class="ver">版本 {{ r.version }}</div>
+        <div class="meta">生效 {{ r.effective_date.strftime("%Y-%m-%d") }} · 编制 {{ r.author }}</div>
+      </div>
+      {% else %}
+      <p class="muted">尚无现行档。</p>
+      {% endfor %}
+    </div>
+    {% if missing_dyes %}
+    <p class="missing-line">无现行档染种：
+      {% for d in missing_dyes %}<span class="miss-chip">{{ d }}</span>{% endfor %}
+      — 这些染种的染缸不能保存染种、也不能从闲置进还原中。
+    </p>
+    {% endif %}
+  </section>
+
+  <div class="recipe-grid">
+    <section class="recipe-list panel-lite">
+      <div class="chips" role="toolbar" aria-label="现行筛选">
+        <a class="chip {{ 'on' if view == 'all' }}" href="/recipes?view=all">全部档案</a>
+        <a class="chip {{ 'on' if view == 'current' }}" href="/recipes?view=current">仅现行</a>
+      </div>
+      <table class="recipe-table">
+        <thead>
+          <tr>
+            <th>染种名</th>
+            <th>版本号</th>
+            <th>生效日</th>
+            <th>现行</th>
+            <th>编制人</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in recipes %}
+          <tr class="{{ 'is-current' if r.is_current }}">
+            <td>{{ r.dye_name }}</td>
+            <td>{{ r.version }}</td>
+            <td>{{ r.effective_date.strftime("%Y-%m-%d") }}</td>
+            <td>{% if r.is_current %}<span class="cur-badge">现行</span>{% else %}—{% endif %}</td>
+            <td>{{ r.author }}</td>
+            <td class="ops">
+              {% if user.is_superuser %}
+                {% if r.is_current %}
+                <form method="post" action="/recipes/{{ r.id }}/void">
+                  <input type="hidden" name="view" value="{{ view }}">
+                  <button type="submit" class="op-btn danger">作废现行</button>
+                </form>
+                {% else %}
+                <form method="post" action="/recipes/{{ r.id }}/current">
+                  <input type="hidden" name="view" value="{{ view }}">
+                  <button type="submit" class="op-btn">点现行</button>
+                </form>
+                {% endif %}
+              {% else %}
+              <span class="muted">仅主管</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" class="muted">暂无档案。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <aside class="recipe-new panel-lite">
+      <h3>新建配方档</h3>
+      <form method="post" action="/recipes">
+        <input type="hidden" name="view" value="{{ view }}">
+        <label>染种名
+          <input name="dye_name" required maxlength="80" placeholder="例如 土靛">
+        </label>
+        <label>版本号
+          <input name="version" required maxlength="40" placeholder="例如 2026-A">
+        </label>
+        <label>生效日
+          <input type="date" name="effective_date" required>
+        </label>
+        <label>编制人
+          <input name="author" maxlength="80" value="{{ user.username }}">
+        </label>
+        <button type="submit">建档</button>
+      </form>
+      <p class="hint">建档即为非现行；同染种版本号唯一。点现行与作废现行仅主管，点现行会同事务关闭同染种其它现行。</p>
+    </aside>
+  </div>
+</div>
+{% endblock %}

@@ -12,6 +12,11 @@ from sqlalchemy.orm import Session, joinedload
 from app.auth import get_current_user
 from app.db import get_db
 from app.models import DipLot, Vat, Workshop
+from app.services.recipe_rules import (
+    current_recipe_map,
+    list_dye_names,
+    require_current_recipe,
+)
 from app.services.vat_rules import VatRuleError, validate_vat_status_change
 
 router = APIRouter()
@@ -56,11 +61,12 @@ def _spark_points(lots: list[DipLot], width: int = 72, height: int = 28) -> list
     return pts
 
 
-def _vat_payload(vat: Vat) -> dict:
+def _vat_payload(vat: Vat, recipe_map: dict) -> dict:
     lots = sorted(vat.lots, key=lambda x: (x.dippedAt, x.id))
     chronological = lots
     latest = lots[-1] if lots else None
     recent = list(reversed(lots[-8:]))  # 展开区展示近几笔
+    current_recipe = recipe_map.get(vat.dyeType)
     return {
         "id": vat.id,
         "code": vat.code,
@@ -70,6 +76,8 @@ def _vat_payload(vat: Vat) -> dict:
         "statusLabel": STATUS_LABELS.get(vat.status, vat.status),
         "workshopId": vat.workshop_id,
         "workshopName": vat.workshop.name if vat.workshop else "",
+        "hasCurrentRecipe": current_recipe is not None,
+        "currentRecipeVersion": current_recipe.version if current_recipe else None,
         "lastRedox": float(latest.redoxMv) if latest and latest.redoxMv is not None else None,
         "lastMeters": float(latest.clothMeters) if latest else None,
         "lastDippedAt": latest.dippedAt.strftime("%Y-%m-%d %H:%M") if latest else None,
@@ -102,11 +110,14 @@ def _bay_context(
         .order_by(Vat.code)
         .all()
     )
+    # 缸位条缺档提示与配方专页现行列表同源：都读 current_recipe_map
+    recipe_map = current_recipe_map(db, {v.dyeType for v in vats})
     return {
         "request": request,
         "user": user,
         "workshops": [{"id": w.id, "name": w.name, "region": w.region} for w in workshops],
-        "vats": [_vat_payload(v) for v in vats],
+        "vats": [_vat_payload(v, recipe_map) for v in vats],
+        "dye_names": list_dye_names(db),
         "filter_workshop": workshop_id,
         "selected_vat": selected_vat,
         "error": error,
@@ -152,7 +163,51 @@ async def bay_vat_status(
     try:
         latest = item.latest_lot()
         validate_vat_status_change(item, status, latest)
+        # 入口二：闲置进还原中，须当前染种存在现行配方档（与染种保存同一检查函数）
+        if status == Vat.STATUS_REDUCING and item.status != Vat.STATUS_REDUCING:
+            require_current_recipe(db, item.dyeType)
         item.status = status
+        db.commit()
+        return RedirectResponse(f"/?vat={pk}" + (f"&workshop={ws}" if ws else ""), status_code=303)
+    except VatRuleError as exc:
+        error = exc.message
+        db.rollback()
+    return render(
+        request,
+        "bay.html",
+        _bay_context(request, db, user, ws, pk, error),
+        status_code=400,
+    )
+
+
+@router.post("/bay/vats/{pk}/dye", response_class=HTMLResponse)
+async def bay_vat_dye(
+    pk: int,
+    request: Request,
+    dyeType: str = Form(...),
+    workshop: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    user = _need_login(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    item = (
+        db.query(Vat)
+        .options(joinedload(Vat.workshop), joinedload(Vat.lots))
+        .filter(Vat.id == pk)
+        .first()
+    )
+    ws = int(workshop) if workshop.strip() else None
+    if not item:
+        return RedirectResponse("/", status_code=303)
+    error = None
+    new_dye = dyeType.strip()
+    try:
+        if not new_dye:
+            raise VatRuleError("染种不能为空。")
+        # 入口一：染缸染种字段保存，新染种须有现行配方档（与改状态同一检查函数）
+        require_current_recipe(db, new_dye)
+        item.dyeType = new_dye
         db.commit()
         return RedirectResponse(f"/?vat={pk}" + (f"&workshop={ws}" if ws else ""), status_code=303)
     except VatRuleError as exc:

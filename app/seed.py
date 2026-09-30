@@ -1,12 +1,12 @@
 import hashlib
 import hmac
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
-from app.models import DipLot, User, Vat, Workshop
+from app.models import DipLot, DyeRecipe, User, Vat, Workshop
 
 _PWD_SALT = os.environ.get("PWD_SALT", "indigovat-dev-salt").encode("utf-8")
 
@@ -42,9 +42,52 @@ def ensure_seed_data(db: Session) -> None:
         )
     db.commit()
 
-    if db.query(Workshop).first():
-        return
+    if not db.query(Workshop).first():
+        _seed_workshops_vats_lots(db)
+    _ensure_recipe_seed(db)
 
+
+def _ensure_recipe_seed(db: Session) -> None:
+    """幂等配方档种子：土靛/板蓝根靛有现行；合成靛只有非现行档（挂在闲置缸 V-02 上）。"""
+    if db.query(DyeRecipe).first():
+        return
+    db.add_all(
+        [
+            DyeRecipe(
+                dye_name="土靛",
+                version="2026-A",
+                effective_date=date(2026, 3, 1),
+                is_current=True,
+                author="admin",
+            ),
+            DyeRecipe(
+                dye_name="土靛",
+                version="2025-B",
+                effective_date=date(2025, 9, 1),
+                is_current=False,
+                author="admin",
+            ),
+            DyeRecipe(
+                dye_name="板蓝根靛",
+                version="1.4",
+                effective_date=date(2026, 1, 15),
+                is_current=True,
+                author="admin",
+            ),
+            # 无现行染种：合成靛只有试产档，从未点现行
+            DyeRecipe(
+                dye_name="合成靛",
+                version="0.9-试",
+                effective_date=date(2026, 8, 20),
+                is_current=False,
+                author="worker",
+            ),
+        ]
+    )
+    db.commit()
+
+
+def _seed_workshops_vats_lots(db: Session) -> None:
     w1 = Workshop(name="蓝靛湾一号坊", region="黔东南", notes="晨露还原较快")
     w2 = Workshop(name="清水江二号坊", region="黔南", notes="缸体较深，保温好")
     db.add_all([w1, w2])
