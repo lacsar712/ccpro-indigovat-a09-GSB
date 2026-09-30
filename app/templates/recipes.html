@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}染种配方专页{% endblock %}
+{% block content %}
+<div class="panel">
+  <h2 style="margin-top:0">染种配方专页</h2>
+  <p class="hint">
+    同染种版本号唯一；同一染种<strong>现行至多一条</strong>，主管点现行时同事务关闭同染种其它现行。
+    染缸工可建档但不能点现行；作废现行也仅主管。
+  </p>
+
+  {% if error %}
+  <div class="error-box">{{ error }}</div>
+  {% endif %}
+
+  {% if missing_dyetypes %}
+  <div class="error-box">
+    以下在用染种<strong>缺现行配方档</strong>，相关染缸无法建档或改为还原中：
+    {{ missing_dyetypes | join("、") }}
+  </div>
+  {% endif %}
+
+  <div class="chips" role="toolbar" aria-label="配方筛选">
+    <a class="chip {% if not only_current %}on{% endif %}"
+       href="/recipes{% if dye_filter %}?dye={{ dye_filter }}{% endif %}">全部配方</a>
+    <a class="chip {% if only_current %}on{% endif %}"
+       href="/recipes?current=1{% if dye_filter %}&dye={{ dye_filter }}{% endif %}">仅现行</a>
+  </div>
+
+  {% if all_dyetypes %}
+  <div class="chips" role="toolbar" aria-label="染种筛选">
+    <a class="chip {% if not dye_filter %}on{% endif %}"
+       href="/recipes{% if only_current %}?current=1{% endif %}">全部染种</a>
+    {% for d in all_dyetypes %}
+    <a class="chip {% if dye_filter == d %}on{% endif %}"
+       href="/recipes?{% if only_current %}current=1&{% endif %}dye={{ d }}">{{ d }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <table class="recipe-tbl">
+    <thead>
+      <tr>
+        <th>染种名</th><th>版本号</th><th>生效日</th><th>状态</th>
+        <th>编制人</th>{% if user.is_superuser %}<th>主管操作</th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in recipes %}
+      <tr class="{% if r.isCurrent %}is-current{% endif %}">
+        <td>{{ r.dyeType }}</td>
+        <td>{{ r.version }}</td>
+        <td>{{ r.effectiveDate }}</td>
+        <td>
+          {% if r.isCurrent %}<span class="badge-current">现行</span>
+          {% else %}<span class="badge-draft">未现行</span>{% endif %}
+        </td>
+        <td>{{ r.preparedBy }}</td>
+        {% if user.is_superuser %}
+        <td>
+          {% if not r.isCurrent %}
+          <form class="inline-form" method="post" action="/recipes/{{ r.id }}/activate">
+            <input type="hidden" name="current" value="{% if only_current %}1{% endif %}">
+            <input type="hidden" name="dye" value="{{ dye_filter }}">
+            <button type="submit" class="btn-mini">点现行</button>
+          </form>
+          {% else %}
+          <form class="inline-form" method="post" action="/recipes/{{ r.id }}/revoke">
+            <input type="hidden" name="current" value="{% if only_current %}1{% endif %}">
+            <input type="hidden" name="dye" value="{{ dye_filter }}">
+            <button type="submit" class="btn-mini btn-warn">作废现行</button>
+          </form>
+          {% endif %}
+        </td>
+        {% endif %}
+      </tr>
+      {% else %}
+      <tr><td colspan="{{ 6 if user.is_superuser else 5 }}">没有匹配的配方档。</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="panel" style="margin-top:1.1rem">
+  <h3 style="margin-top:0">新建配方档</h3>
+  <p class="hint">
+    染缸工可建档（默认未现行）；{% if user.is_superuser %}主管可勾选「建档即点现行」。
+    {% else %}<strong>仅主管可点现行</strong>，本页不提供现行勾选。{% endif %}
+  </p>
+  <form method="post" action="/recipes">
+    <div class="panel-grid">
+      <label>染种名
+        <input type="text" name="dyeType" maxlength="80" required list="recipe-dye-list"
+               value="{{ form.dyeType or '' }}" placeholder="例如 土靛">
+        <datalist id="recipe-dye-list">
+          {% for d in all_dyetypes %}<option value="{{ d }}"></option>{% endfor %}
+        </datalist>
+      </label>
+      <label>版本号（同染种唯一）
+        <input type="text" name="version" maxlength="40" required
+               value="{{ form.version or '' }}" placeholder="例如 v2026.09">
+      </label>
+      <label>生效日
+        <input type="date" name="effectiveDate" required
+               value="{{ form.effectiveDate or today }}">
+      </label>
+      <label>编制人
+        <input type="text" name="preparedBy" maxlength="80" required
+               value="{{ form.preparedBy or user.username }}">
+      </label>
+    </div>
+    {% if user.is_superuser %}
+    <label style="display:flex;align-items:center;gap:0.5rem;margin:0.4rem 0 0.8rem">
+      <input type="checkbox" name="isCurrent" value="1" style="width:auto"
+             {% if form.isCurrent %}checked{% endif %}>
+      建档即点现行（同事务关闭同染种其它现行）
+    </label>
+    {% endif %}
+    <input type="hidden" name="current" value="{% if only_current %}1{% endif %}">
+    <input type="hidden" name="dye" value="{{ dye_filter }}">
+    <button type="submit">保存配方档</button>
+  </form>
+</div>
+
+<p class="rule-foot">
+  现行唯一性由数据库部分唯一索引兜底；保存染缸与闲置改还原中两处入口共用同一现行档检查。
+</p>
+{% endblock %}

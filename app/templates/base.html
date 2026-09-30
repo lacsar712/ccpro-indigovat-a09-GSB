@@ -199,6 +199,71 @@
     .st-ready .status-dot { background: #5dcea8; box-shadow: 0 0 8px rgba(93, 206, 168, 0.65); }
     .status-label { font-size: 0.78rem; opacity: 0.9; }
     .spark { display: block; margin-top: 0.25rem; opacity: 0.9; }
+    .missing-tag {
+      display: inline-block;
+      margin: 0.25rem 0 0.35rem;
+      padding: 0.08rem 0.45rem;
+      font-size: 0.7rem;
+      border-radius: 999px;
+      color: #ffd9a8;
+      background: rgba(176, 96, 32, 0.55);
+      border: 1px solid rgba(255, 200, 140, 0.55);
+    }
+    .create-vat { margin-bottom: 1.1rem; }
+    .create-vat summary { list-style: revert; font-size: 1rem; }
+    .topnav { display: flex; gap: 0.5rem; align-items: center; }
+    .topnav a {
+      padding: 0.3rem 0.8rem;
+      border: 1px solid rgba(216, 235, 232, 0.45);
+      border-radius: 999px;
+      color: var(--foam);
+      font-size: 0.85rem;
+      text-decoration: none;
+    }
+    .topnav a:hover { background: rgba(216, 235, 232, 0.12); }
+    .topnav a.on {
+      background: linear-gradient(135deg, rgba(61, 139, 156, 0.85), rgba(31, 77, 107, 0.95));
+      border-color: rgba(216, 235, 232, 0.65);
+    }
+    table.recipe-tbl {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      font-size: 0.9rem;
+    }
+    .recipe-tbl th, .recipe-tbl td {
+      padding: 0.55rem 0.65rem;
+      border-bottom: 1px solid #d8e4e2;
+      text-align: left;
+    }
+    .recipe-tbl tr.is-current td { background: #eef7f2; }
+    .badge-current {
+      display: inline-block;
+      padding: 0.05rem 0.5rem;
+      border-radius: 999px;
+      font-size: 0.74rem;
+      background: #1a7a5c;
+      color: #fff;
+    }
+    .badge-draft {
+      display: inline-block;
+      padding: 0.05rem 0.5rem;
+      border-radius: 999px;
+      font-size: 0.74rem;
+      background: #cdd8d6;
+      color: #35505a;
+    }
+    .inline-form { display: inline; }
+    .panel button.btn-mini {
+      width: auto;
+      margin: 0;
+      padding: 0.2rem 0.6rem;
+      font-size: 0.78rem;
+      background: var(--indigo-mid);
+      border-color: var(--indigo-mid);
+      color: #fff;
+    }
+    .panel button.btn-mini.btn-warn { background: #8a5a2a; border-color: #8a5a2a; }
     .panel {
       background: linear-gradient(165deg, rgba(244, 248, 247, 0.97), rgba(232, 242, 240, 0.94));
       border: 1px solid rgba(31, 77, 107, 0.18);
@@ -292,7 +357,11 @@
         <p class="sub">IndigoVat · 按缸位盯氧化还原，点开记浸染与改状态</p>
       </div>
       <div class="user-pill">
-        <span>{{ user.username }}</span>
+        <nav class="topnav" aria-label="主导航">
+          <a href="/" class="{% if active == 'bay' %}on{% endif %}">染缸还原台</a>
+          <a href="/recipes" class="{% if active == 'recipes' %}on{% endif %}">染种配方专页</a>
+        </nav>
+        <span>{{ user.username }}{% if user.is_superuser %}（主管）{% else %}（染缸工）{% endif %}</span>
         <form method="post" action="/logout">
           <button type="submit">退出</button>
         </form>

@@ -1,12 +1,12 @@
 import hashlib
 import hmac
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
-from app.models import DipLot, User, Vat, Workshop
+from app.models import DipLot, DyeRecipe, User, Vat, Workshop
 
 _PWD_SALT = os.environ.get("PWD_SALT", "indigovat-dev-salt").encode("utf-8")
 
@@ -20,6 +20,52 @@ def hash_password(password: str) -> str:
 
 def verify_password(plain: str, hashed: str) -> bool:
     return hmac.compare_digest(hash_password(plain), hashed)
+
+
+def _ensure_recipe_seed(db: Session) -> None:
+    """幂等补齐配方专页演示数据：
+
+    - 土靛/合成靛/板蓝根靛 各有现行档（土靛另有一条被替代旧版）
+    - 蓼蓝草靛只有染缸工拟的未现行草稿，并挂一台闲置缸 V-21
+    """
+    w2 = db.query(Workshop).filter_by(name="清水江二号坊").first()
+    if w2 is not None and not db.query(Vat).filter_by(code="V-21").first():
+        db.add(
+            Vat(
+                workshop_id=w2.id,
+                code="V-21",
+                dyeType="蓼蓝草靛",
+                volumeL=Decimal("500.00"),
+                status=Vat.STATUS_IDLE,
+            )
+        )
+
+    if db.query(DyeRecipe).first():
+        return
+    db.add_all(
+        [
+            DyeRecipe(
+                dyeType="土靛", version="v2025.1",
+                effectiveDate=date(2025, 3, 1), isCurrent=False, preparedBy="老杨",
+            ),
+            DyeRecipe(
+                dyeType="土靛", version="v2026.1",
+                effectiveDate=date(2026, 1, 15), isCurrent=True, preparedBy="老杨",
+            ),
+            DyeRecipe(
+                dyeType="合成靛", version="v2026.1",
+                effectiveDate=date(2026, 2, 1), isCurrent=True, preparedBy="阿芬",
+            ),
+            DyeRecipe(
+                dyeType="板蓝根靛", version="v2025.2",
+                effectiveDate=date(2025, 11, 20), isCurrent=True, preparedBy="老杨",
+            ),
+            DyeRecipe(
+                dyeType="蓼蓝草靛", version="v2026-draft1",
+                effectiveDate=date(2026, 9, 1), isCurrent=False, preparedBy="worker",
+            ),
+        ]
+    )
 
 
 def ensure_seed_data(db: Session) -> None:
@@ -43,6 +89,8 @@ def ensure_seed_data(db: Session) -> None:
     db.commit()
 
     if db.query(Workshop).first():
+        _ensure_recipe_seed(db)
+        db.commit()
         return
 
     w1 = Workshop(name="蓝靛湾一号坊", region="黔东南", notes="晨露还原较快")
@@ -78,7 +126,15 @@ def ensure_seed_data(db: Session) -> None:
         volumeL=Decimal("750.00"),
         status=Vat.STATUS_READY,
     )
-    db.add_all([v1, v2, v3, v4])
+    # 闲置缸挂在「无现行配方档」的染种上：只有未现行草稿，建档/改还原中都应被联锁拦下
+    v5 = Vat(
+        workshop_id=w2.id,
+        code="V-21",
+        dyeType="蓼蓝草靛",
+        volumeL=Decimal("500.00"),
+        status=Vat.STATUS_IDLE,
+    )
+    db.add_all([v1, v2, v3, v4, v5])
     db.flush()
 
     now = datetime.now(timezone.utc)
@@ -140,4 +196,5 @@ def ensure_seed_data(db: Session) -> None:
             ],
         )
     )
+    _ensure_recipe_seed(db)
     db.commit()

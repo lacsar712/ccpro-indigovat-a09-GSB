@@ -1,15 +1,18 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import (
     Boolean,
+    Date,
     DateTime,
     ForeignKey,
+    Index,
     Numeric,
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -72,3 +75,27 @@ class DipLot(Base):
     redoxMv: Mapped[Optional[Decimal]] = mapped_column(Numeric(8, 2), nullable=True)
 
     vat: Mapped["Vat"] = relationship(back_populates="lots")
+
+
+class DyeRecipe(Base):
+    """染种配方档：同染种版本唯一；同一染种现行档至多一条。"""
+
+    __tablename__ = "dye_recipes"
+    __table_args__ = (
+        UniqueConstraint("dyeType", "version", name="uniq_recipe_version_per_dyetype"),
+        # 部分唯一索引：数据库层兜底「同一染种现行至多一条」，双点现行也只会成功一条
+        Index(
+            "uniq_current_recipe_per_dyetype",
+            "dyeType",
+            unique=True,
+            postgresql_where=text("\"isCurrent\""),
+            sqlite_where=text("\"isCurrent\""),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    dyeType: Mapped[str] = mapped_column(String(80), index=True)
+    version: Mapped[str] = mapped_column(String(40))
+    effectiveDate: Mapped[date] = mapped_column(Date)
+    isCurrent: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    preparedBy: Mapped[str] = mapped_column(String(80))

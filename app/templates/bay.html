@@ -33,6 +33,7 @@
       >
         <div class="code" x-text="v.code"></div>
         <div class="meta" x-text="v.workshopName + ' · ' + v.dyeType"></div>
+        <div class="missing-tag" x-show="!v.hasCurrentRecipe" x-cloak>缺现行配方档</div>
         <div class="status-label">
           <span class="status-dot"></span>
           <span x-text="v.statusLabel"></span>
@@ -67,6 +68,43 @@
     </template>
   </div>
   <p class="empty-bay" x-show="filteredVats().length === 0" x-cloak>此工坊暂无染缸。</p>
+
+  <details class="panel create-vat"
+           x-data="{ open: {{ 'true' if open_create else 'false' }} }"
+           {% if open_create %}open{% endif %} :open="open">
+    <summary @click="open = !open" style="cursor:pointer;color:var(--indigo-deep);font-weight:600">
+      ＋ 新建染缸（建档）
+    </summary>
+    <p class="hint" style="margin-top:0.6rem">
+      染缸工可建档；但染种<strong>无现行配方档</strong>时无法保存，也不能改为还原中。
+      现行档请到 <a href="/recipes">染种配方专页</a> 由主管点现行。
+    </p>
+    <form method="post" action="/bay/vats" @submit="open = true">
+      <div class="panel-grid">
+        <label>所属工坊
+          <select name="workshop_id" required>
+            <template x-for="w in workshops" :key="w.id">
+              <option :value="w.id" x-text="w.name" :selected="filterWs === w.id"></option>
+            </template>
+          </select>
+        </label>
+        <label>缸号
+          <input type="text" name="code" maxlength="40" required placeholder="例如 V-31">
+        </label>
+        <label>染种
+          <input type="text" name="dyeType" maxlength="80" required list="dyetype-list" placeholder="例如 土靛">
+          <datalist id="dyetype-list">
+            <template x-for="d in dyeTypes()" :key="d"><option :value="d"></option></template>
+          </datalist>
+        </label>
+        <label>容积 (L)
+          <input type="number" name="volumeL" step="0.01" min="0.01" required placeholder="例如 700">
+        </label>
+      </div>
+      <input type="hidden" name="workshop" :value="filterWs || ''">
+      <button type="submit">保存染缸</button>
+    </form>
+  </details>
 
   <div class="panel" x-show="selected()" x-cloak x-transition>
     <template x-if="selected()">
@@ -104,10 +142,13 @@
               <label>目标状态
                 <select name="status" required :value="selected().status">
                   <option value="idle">闲置</option>
-                  <option value="reducing">还原中</option>
+                  <option value="reducing">还原中（须有现行配方档）</option>
                   <option value="ready">可染色</option>
                 </select>
               </label>
+              <p class="hint" x-show="!selected().hasCurrentRecipe" style="color:#8b1e1e;margin:0.2rem 0 0.6rem;font-size:0.82rem">
+                该染种缺现行配方档：改为还原中会被拒绝。
+              </p>
               <button type="submit">更新状态</button>
             </form>
             <h3 style="font-size:0.95rem;margin:1.25rem 0 0.4rem;color:#1f4d6b">近几笔浸染</h3>
@@ -165,6 +206,9 @@
       filteredVats() {
         if (this.filterWs === null) return this.vats;
         return this.vats.filter(v => v.workshopId === this.filterWs);
+      },
+      dyeTypes() {
+        return [...new Set(this.vats.map(v => v.dyeType))].sort();
       },
       toggle(id) {
         this.selectedId = this.selectedId === id ? null : id;
